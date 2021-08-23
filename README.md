@@ -15,7 +15,7 @@ git clone https://github.com/owatu1234/youtube-otosuyatu.git
 ### 2.依存関係のインストール
 
 ```
-node install
+npm install
 ```
 
 ### 3.実行
