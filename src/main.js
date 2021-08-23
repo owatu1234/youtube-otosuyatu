@@ -3,6 +3,8 @@ import got from "got"
 import { writeFile } from "fs/promises"
 import { createInterface } from "readline"
 
+const INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
 function extractId(s) {
   const match = s.match(/[0-9a-zA-Z-_]{11}/)
   return match ? match[0] : null
@@ -34,24 +36,22 @@ npm start dQw4w9WgXcQ mimetype audio/mp4`)
   process.exit()
 }
 
-let res = await got(`https://www.youtube.com/watch?v=${videoId}&pbj=1`, {
+let res = await got(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}`, {
   method: "POST",
   headers: { "User-Agent": "AppleWebKit Chrome" },
+  body: JSON.stringify({
+    context: {
+      client: {
+        hl: "ja",
+        gl: "JP",
+        clientName: "WEB",
+        clientVersion: "2.20210820.01.00",
+      },
+    },
+    videoId,
+  }),
 })
 let body = JSON.parse(res.body)
-
-let playerResponse
-body.forEach((v) => {
-  if (v.playerResponse) {
-    playerResponse = v.playerResponse
-
-    const videoDetails = v.playerResponse.videoDetails
-    console.log(`videoId: \x1b[1m${videoDetails.videoId}\x1b[m`)
-    console.log(`title: \x1b[1m${videoDetails.title}\x1b[m`)
-    console.log(`author: \x1b[1m${videoDetails.author}\x1b[m`)
-    console.log()
-  }
-})
 
 let filteredStreams = []
 let interactiveMode = false
@@ -66,7 +66,7 @@ switch (process.argv[3]) {
   case "video":
   case "v":
     console.log('> Detect "video" option')
-    playerResponse.streamingData.adaptiveFormats.forEach((v) => {
+    body.streamingData.adaptiveFormats.forEach((v) => {
       if (v.mimeType.startsWith("video/")) {
         filteredStreams.push(v)
       }
@@ -75,7 +75,7 @@ switch (process.argv[3]) {
   case "audio":
   case "a":
     console.log('> Detect "audio" option')
-    playerResponse.streamingData.adaptiveFormats.forEach((v) => {
+    body.streamingData.adaptiveFormats.forEach((v) => {
       if (v.mimeType.startsWith("audio/")) {
         filteredStreams.push(v)
       }
@@ -84,7 +84,7 @@ switch (process.argv[3]) {
   case "both":
   case "b":
     console.log('> Detect "both" option')
-    playerResponse.streamingData.formats.forEach((v) => {
+    body.streamingData.formats.forEach((v) => {
       filteredStreams.push(v)
     })
     break
@@ -95,7 +95,7 @@ switch (process.argv[3]) {
       process.exit()
     }
 
-    playerResponse.streamingData.adaptiveFormats.forEach((v) => {
+    body.streamingData.adaptiveFormats.forEach((v) => {
       if (v.mimeType.includes(process.argv[4])) {
         filteredStreams.push(v)
       }
@@ -110,7 +110,7 @@ switch (process.argv[3]) {
     console.log("> option not detected, enter interactive mode\n")
     interactiveMode = true
     let indexes = []
-    playerResponse.streamingData.adaptiveFormats.forEach((v, i) => {
+    body.streamingData.adaptiveFormats.forEach((v, i) => {
       indexes.push(i)
       let len = `[${i}] `.length
       if (v.qualityLabel) {
@@ -146,7 +146,7 @@ switch (process.argv[3]) {
 
       answered = indexes.includes(parseInt(answer))
     }
-    stream = playerResponse.streamingData.adaptiveFormats[answer]
+    stream = body.streamingData.adaptiveFormats[answer]
 }
 
 if (!interactiveMode) {
@@ -162,20 +162,18 @@ if (stream.url) {
   console.log(`\nResult: ${stream.url}`)
 } else {
   console.log("> Detect signature")
-  const signatureInfo = {
-    s: decodeURIComponent(stream.signatureCipher.match(/s=([^&]*)/)[1]),
-    sp: decodeURIComponent(stream.signatureCipher.match(/sp=([^&]*)/)[1]),
-    url: decodeURIComponent(stream.signatureCipher.match(/url=([^&]*)/)[1]),
-  }
+  const sig = decodeURIComponent(stream.signatureCipher.match(/s=([^&]*)/)[1])
+  const sigParam = decodeURIComponent(stream.signatureCipher.match(/sp=([^&]*)/)[1])
+  const url = decodeURIComponent(stream.signatureCipher.match(/url=([^&]*)/)[1])
 
   body = (await got(`https://www.youtube.com/watch?v=${process.argv[2]}`)).body
   body = (await got(`https://www.youtube.com${body.match(/script src="(.*?base.js)"/)[1]}`)).body
 
   // start with "*.split("")"
   // end with "*.join("")"
-  let decipherFuncBody = body.match(/\w+=function\(.+\){(.+split\(""\);(.+?)\..+?.+?;return .+\.join\(""\))}/)
+  let decipherFuncBody = body.match(/\w+=function\(.+\){(.+split\(""\);(.+?)\..+?.+?;return .+\.join\(""\))};/)
   let operatorsCode = body.match(new RegExp(`var ${decipherFuncBody[2]}={.+?};`, "s"))[0]
   let getSignature = new Function("a", operatorsCode + decipherFuncBody[1])
 
-  console.log(`\nResult: ${signatureInfo.url}&sig=${getSignature(signatureInfo.s)}`)
+  console.log(`\nResult: ${url}&${sigParam}=${encodeURIComponent(getSignature(sig))}`)
 }
