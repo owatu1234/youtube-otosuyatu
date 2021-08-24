@@ -183,7 +183,7 @@ if (stream.url) {
   }
   sigCipher[tempKey] = decodeURIComponent(tempStr)
 
-  body = (await got(`https://www.youtube.com/watch?v=${process.argv[2]}`)).body
+  body = (await got(`https://www.youtube.com/watch?v=${videoId}`)).body
   body = (await got(`https://www.youtube.com${body.match(/script src="(.*?base.js)"/)[1]}`)).body
 
   // start with "*.split("")"
